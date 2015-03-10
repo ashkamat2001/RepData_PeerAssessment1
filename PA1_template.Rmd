@@ -1,25 +1,139 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "RR-Project1"
+date: "Wednesday, March 11, 2015"
+output: html_document
 ---
 
+This report contains the analysis of the activity monitoring data specified for this assignment.
 
-## Loading and preprocessing the data
+First Load the data:
+```{r}
+steps=read.csv("activity.csv")
+summary(steps)
+```
+It can be seen that the "steps" column contains some NAs. As instructed we will be imputing the NA's later on in the assignment and ignoring them for the time-being.
+
+###Analysis of Total Steps Per Day
+Calculating Total Nr. of Steps taken per day
+```{r}
+#steps_pd=rowsum(steps$steps,steps$date,na.rm=T)
+#hist(steps_pd)
+#meanSteps = mean(steps_pd)
+#medianSteps = median(steps_pd)
+#abline(v=meanSteps, col="red", lty=2)
+#abline(v=medianSteps, col="blue", lty=2)
+#legend("topright", legend=c("Mean", "Median"), lty=c(2,2), col=c("red","blue"), cex=0.6)
+myHist <- function (df){
+  steps_pd=rowsum(df$steps,df$date,na.rm=T)
+  hist(steps_pd, main="Steps per day", xlab="steps")
+  meanSteps = mean(steps_pd)
+  medianSteps = median(steps_pd)
+  abline(v=meanSteps, col="red", lty=2)
+  abline(v=medianSteps, col="blue", lty=2)
+  legend("topright", legend=c("Mean", "Median"), lty=c(2,2), col=c("red","blue"), cex=0.6)
+  c(meanSteps,medianSteps)
+}
+
+summ_steps = myHist(steps)
+```
+
+Total nr. of steps taken per day has <B><U>mean of `r summ_steps[1]`</U></B> steps per day and median of <B><U> `r summ_steps[2]` </U></B>steps per day
+
+###Analysing Average Daily Activity Pattern
+```{r}
+#Following library needed for by function.
+library(taRifx)
+#create smaller dataframe without the NAs
+small_steps=steps[!is.na(steps$steps),]
+
+#Average the NAs over the column interval
+steps_avg_int = as.data.frame(by(small_steps$steps, small_steps$interval, mean))
+
+#The following did not work. Hence used the by function from taRifx
+#steps_avg_int=aggregate(x=c(steps$steps), by=as.list(steps$interval), FUN=mean, na.action=na.omit)
+
+#Plot the timeseries of average steps over intervals 
+```
+
+The following plot show the average step pattern along a series of 5 min intervals in a day
+```{r}
+plot(steps_avg_int$IDX1,steps_avg_int$value, type="l", xlab="interval", ylab="steps", main="Average Activity Over the Day")
+
+#determine the interval containing the max average steps
+max_steps = max(steps_avg_int$value)
+max_steps_interval = steps_avg_int[steps_avg_int$value==max_steps,]$IDX1
+
+```
+The <B><U>`r max_steps_interval` th interval</U></B> contains the maximum nr. of steps in a day.
 
 
+###Strategy for Imputing Missing Values 
+```{r}
+#Num oF NAs
+na_steps = nrow(steps[is.na(steps$steps),])
+```
+The total nr. of missing values in the dataset are <B><U> `r na_steps` </U></B>
 
-## What is mean total number of steps taken per day?
+We will fill in all of the missing values in the dataset with the mean for that 5-minute interval. We will not use the day mean because the days having NAs do not have any data for that day.
 
+Filling in the missing values:
+```{r}
+nasteps=is.na(steps$steps)
+n=length(nasteps)
+for  (i in 1:n)
+{
+  if (nasteps[i])
+  {
+    #Get the row corresponding to the interval of the step with missing value
+    intmeanrow = steps_avg_int[steps_avg_int$IDX1 == steps[i,]$interval,]
+    #Doublechecking that there is an interval average available.
+    if (nrow(intmeanrow) != 0 ) {steps[i,]$steps = intmeanrow$value}
+  }
+}
+```
+Replotting the histogram
+```{r}
+new_summ_steps=myHist(steps)
 
+```
 
-## What is the average daily activity pattern?
+After imputing the values the mean now shifts to `r new_summ_steps[1]` from `r summ_steps[1]` and the median shifts to `r new_summ_steps[2]` from `r summ_steps[2]`
 
+Imputing the data  <B><U> increases </U></B> the steps per day
 
+###Differences in Activity Pattern between weekdays and weekends
+Augmenting the data with factors Weekend / Weekday and computing the average steps per interval for weekdays and weekends.
+```{r}
+weekdays=weekdays(as.Date(steps$date,"%Y-%m-%d"))
+daytype=c()
+n=length(weekdays)
+for  (i in 1:n)
+{
+  daytype= c(daytype, if ((weekdays[i]=="Saturday") | (weekdays[i]=="Sunday") ) "Weekend" else "Weekday")
+}
+new_steps=data.frame(steps,daytype)
 
-## Imputing missing values
+#Separating the data by weekdays and weekends
+weekends=(new_steps$daytype == "Weekend")
+weekday_data=new_steps[!weekends,]
+weekend_data=new_steps[weekends,]
 
+#Computing the average steps per interval averaged over days for weekdays and weekends
+steps_avg_int_wd = as.data.frame(by(weekday_data$steps, weekday_data$interval, mean))
+steps_avg_int_we = as.data.frame(by(weekend_data$steps, weekend_data$interval, mean))
 
+new_data_wd = data.frame(int=steps_avg_int_wd[,1],steps=steps_avg_int_wd[,2],type="Weekday")
+new_data_we = data.frame(int=steps_avg_int_we[,1],steps=steps_avg_int_we[,2],type="Weekend")
 
-## Are there differences in activity patterns between weekdays and weekends?
+#combining the data
+new_data_tot = rbind(new_data_wd,new_data_we)
+
+```
+The following plot shows the activity over intervals for weekdays and weekends separately.
+```{r}
+library(lattice)
+xyplot(steps ~ int | type, data=new_data_tot, type="l", layout=c(1,2), xlab="interval")
+
+```
+
+It is seen that in a certain morning interval the weekday activity is more than the weekend, but during most of the remainder part of the the weekend activity is more than the weekday activity. 
